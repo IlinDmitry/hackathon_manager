@@ -8,8 +8,17 @@ class BulkMessageWorker
 
     recipients = self.class.build_recipients(message.recipients)
 
-    recipients.each do |recipient|
-      Mailer.delay.bulk_message_email(message.id, recipient)
+    # Ensures it takes no longer than 30 minutes to deliver all mail
+    # 30 groups * 1 minute = 30 minutes
+    delay_increment = 1.minute
+    slice_size = [10, recipients.count / 30].max.to_int
+
+    delay_minutes = 0.minutes
+    recipients.each_slice(slice_size) do |recipient_slice|
+      recipient_slice.each do |recipient|
+        Mailer.delay_for(delay_minutes).bulk_message_email(message.id, recipient)
+      end
+      delay_minutes += delay_increment
     end
 
     message.update_attribute(:delivered_at, Time.now)
